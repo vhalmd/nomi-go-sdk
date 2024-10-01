@@ -12,7 +12,7 @@ Welcome to the Go SDK for the Nomi API. This SDK allows you to interact with the
 To install the SDK, you can use `go get`:
 
 ```bash
-go get github.com/vhalmd/nomi-sdk
+go get github.com/vhalmd/nomi-go-sdk
 ```
 
 Import the package into your project:
