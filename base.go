@@ -3,6 +3,8 @@ package nomi
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"github.com/google/uuid"
 	"io"
 	"net/http"
@@ -68,7 +70,7 @@ func (a api) GetNomi(nomiID string) (GetNomiResponse, error) {
 
 	id, err := uuid.Parse(nomiID)
 	if err != nil {
-		return GetNomiResponse{}, err
+		return GetNomiResponse{}, InvalidRouteParams
 	}
 
 	u, err := url.JoinPath(a.baseUrl, "nomis", id.String())
@@ -91,6 +93,13 @@ func (a api) GetNomi(nomiID string) (GetNomiResponse, error) {
 	b, err := io.ReadAll(response.Body)
 	if err != nil {
 		return GetNomiResponse{}, err
+	}
+
+	if response.StatusCode < 200 || response.StatusCode > 299 {
+		err = parseError(b)
+		if err != nil {
+			return GetNomiResponse{}, err
+		}
 	}
 
 	err = json.Unmarshal(b, &res)
@@ -137,10 +146,72 @@ func (a api) SendMessage(nomiID string, body SendMessageBody) (SendMessageRespon
 		return SendMessageResponse{}, err
 	}
 
+	if response.StatusCode < 200 || response.StatusCode > 299 {
+		err = parseError(b)
+		if err != nil {
+			return SendMessageResponse{}, err
+		}
+	}
+
 	err = json.Unmarshal(b, &res)
 	if err != nil {
 		return SendMessageResponse{}, err
 	}
 
 	return res, nil
+}
+
+type APIErrorIssues struct {
+	Code       string   `json:"code"`
+	Expected   string   `json:"expected"`
+	Received   string   `json:"received"`
+	Path       []string `json:"path"`
+	Message    string   `json:"message"`
+	Validation string   `json:"validation"`
+}
+
+type APIError struct {
+	Type   string         `json:"type"`
+	Issues APIErrorIssues `json:"issues"`
+}
+type APIErrorResponse struct {
+	Err APIError `json:"error"`
+}
+
+func (a APIErrorResponse) Error() string {
+	return fmt.Sprintf("%+v", a)
+}
+
+func parseError(b []byte) error {
+	var apiErr APIErrorResponse
+
+	err := json.Unmarshal(b, &apiErr)
+	if err != nil {
+		return err
+	}
+
+	switch apiErr.Err.Type {
+	case "NomiNotFound":
+		return NotFound
+	case "InvalidRouteParams":
+		return InvalidRouteParams
+	case "InvalidContentType":
+		return InvalidContentType
+	case "NoReply":
+		return NoReply
+	case "NomiStillResponding":
+		return StillResponding
+	case "NomiNotReady":
+		return NotReady
+	case "OngoingVoiceCallDetected":
+		return OngoingVoiceCallDetected
+	case "MessageLengthLimitExceeded":
+		return MessageLengthLimitExceeded
+	case "LimitExceeded":
+		return LimitExceeded
+	case "InvalidBody":
+		return InvalidBody
+	default:
+		return errors.New("unknown error")
+	}
 }
