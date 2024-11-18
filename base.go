@@ -3,8 +3,6 @@ package nomi
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"github.com/google/uuid"
 	"io"
 	"net/http"
@@ -12,12 +10,26 @@ import (
 )
 
 type API interface {
-	// GetNomis allows you to list all the nomis associated with your account
+	// GetNomis allows you to list all the Nomis associated with your account
 	GetNomis() (GetNomisResponse, error)
-	// GetNomi endpoint allows you to get the details of a specific Nomi associated with your account
+	// GetNomi allows you to get the details of a specific Nomi associated with your account
 	GetNomi(nomiID string) (GetNomiResponse, error)
 	// SendMessage allows you to send a message in the main chat for this Nomi and get a reply
 	SendMessage(nomiID string, body SendMessageBody) (SendMessageResponse, error)
+	// GetRooms allows you to list all the Rooms associated with your account
+	GetRooms() (GetRoomsResponse, error)
+	// CreateRoom allows you to create a new Room associated with your account
+	CreateRoom(body CreateRoomBody) (CreateRoomResponse, error)
+	// GetRoom allows you to get the details of a specific Room associated with your account
+	GetRoom(roomID string) (GetRoomResponse, error)
+	// SendRoomMessage allows you to send a message in this Room. This method will not return a response to your message, if you want to get a response from your nomi, see RequestNomiRoomMessage
+	SendRoomMessage(roomID string, body SendRoomMessageBody) (SendRoomMessageResponse, error)
+	// RequestNomiRoomMessage allows you to make a Nomi send a message in a Room
+	RequestNomiRoomMessage(roomID string, body RequestNomiRoomMessageBody) (RequestNomiMessageResponse, error)
+	// UpdateRoom allows you to edit the details of a Room
+	UpdateRoom(roomID string, body UpdateRoomBody) (UpdateRoomResponse, error)
+	// DeleteRoom allows you to delete a Room associated with your account
+	DeleteRoom(roomID string) (success bool, err error)
 }
 
 type api struct {
@@ -33,7 +45,7 @@ func NewClient(apiKey string) API {
 }
 
 func (a api) GetNomis() (GetNomisResponse, error) {
-	res := GetNomisResponse{}
+	var res GetNomisResponse
 
 	u, err := url.JoinPath(a.baseUrl, "nomis")
 	if err != nil {
@@ -159,59 +171,4 @@ func (a api) SendMessage(nomiID string, body SendMessageBody) (SendMessageRespon
 	}
 
 	return res, nil
-}
-
-type APIErrorIssues struct {
-	Code       string   `json:"code"`
-	Expected   string   `json:"expected"`
-	Received   string   `json:"received"`
-	Path       []string `json:"path"`
-	Message    string   `json:"message"`
-	Validation string   `json:"validation"`
-}
-
-type APIError struct {
-	Type   string         `json:"type"`
-	Issues APIErrorIssues `json:"issues"`
-}
-type APIErrorResponse struct {
-	Err APIError `json:"error"`
-}
-
-func (a APIErrorResponse) Error() string {
-	return fmt.Sprintf("%+v", a)
-}
-
-func parseError(b []byte) error {
-	var apiErr APIErrorResponse
-
-	err := json.Unmarshal(b, &apiErr)
-	if err != nil {
-		return err
-	}
-
-	switch apiErr.Err.Type {
-	case "NomiNotFound":
-		return NotFound
-	case "InvalidRouteParams":
-		return InvalidRouteParams
-	case "InvalidContentType":
-		return InvalidContentType
-	case "NoReply":
-		return NoReply
-	case "NomiStillResponding":
-		return StillResponding
-	case "NomiNotReady":
-		return NotReady
-	case "OngoingVoiceCallDetected":
-		return OngoingVoiceCallDetected
-	case "MessageLengthLimitExceeded":
-		return MessageLengthLimitExceeded
-	case "LimitExceeded":
-		return LimitExceeded
-	case "InvalidBody":
-		return InvalidBody
-	default:
-		return errors.New("unknown error")
-	}
 }
